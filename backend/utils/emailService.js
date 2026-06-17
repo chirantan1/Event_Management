@@ -1,18 +1,10 @@
-// ============================================
-// FILE: backend/utils/emailService.js
-// ============================================
-// ✅ COMPLETE FIXED CODE - With Better Error Handling & Debugging
-// ============================================
-
 const nodemailer = require('nodemailer');
 
-// Create transporter with better configuration
 let transporter = null;
 let isTransporterVerified = false;
 
 const createTransporter = () => {
   if (!transporter) {
-    // Validate email configuration
     const emailUser = process.env.EMAIL_USER;
     const emailPass = process.env.EMAIL_PASS;
 
@@ -20,69 +12,38 @@ const createTransporter = () => {
     console.log(`  📧 EMAIL_USER: ${emailUser ? '✅ Set' : '❌ Not set'}`);
     console.log(`  🔑 EMAIL_PASS: ${emailPass ? `✅ Set (${emailPass.length} chars)` : '❌ Not set'}`);
     
-    // Check for spaces in password (common issue)
     if (emailPass && emailPass.includes(' ')) {
-      console.warn('⚠️ WARNING: EMAIL_PASS contains spaces! This will cause authentication failures.');
-      console.warn('⚠️ Please remove spaces from your app password.');
-      console.warn(`⚠️ Current password: "${emailPass}"`);
+      console.warn('⚠️ WARNING: EMAIL_PASS contains spaces! Removing them...');
     }
 
     if (!emailUser || !emailPass) {
       console.error('❌ Email service not configured. Please set EMAIL_USER and EMAIL_PASS in .env');
-      console.error('   Example:');
-      console.error('   EMAIL_USER=your-email@gmail.com');
-      console.error('   EMAIL_PASS=your16charapppassword (no spaces)');
       return null;
     }
 
-    // Clean password (remove any spaces)
     const cleanPassword = emailPass.replace(/\s/g, '');
-    
-    if (cleanPassword !== emailPass) {
-      console.warn('⚠️ Removed spaces from EMAIL_PASS');
-    }
 
     transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
         user: emailUser,
-        pass: cleanPassword // Use cleaned password
+        pass: cleanPassword
       },
-      // Gmail specific settings
       tls: {
         rejectUnauthorized: false
       },
-      // Connection settings
       connectionTimeout: 30000,
       greetingTimeout: 30000,
       socketTimeout: 30000,
-      // Enable debugging in development
-      debug: process.env.NODE_ENV === 'development',
-      logger: process.env.NODE_ENV === 'development'
+      debug: false,
+      logger: false
     });
 
-    // Verify transporter configuration immediately
     transporter.verify((error, success) => {
       if (error) {
         console.error('❌ Email transporter verification failed:');
         console.error(`   Error: ${error.message}`);
         console.error(`   Code: ${error.code || 'N/A'}`);
-        console.error(`   Command: ${error.command || 'N/A'}`);
-        
-        // Provide helpful error messages
-        if (error.message.includes('Invalid login')) {
-          console.error('⚠️ Gmail authentication failed. Please check:');
-          console.error('   1. EMAIL_USER is correct (your Gmail address)');
-          console.error('   2. EMAIL_PASS is the 16-character App Password (not your Gmail password)');
-          console.error('   3. No spaces in the App Password');
-          console.error('   4. 2-Step Verification is enabled in your Google Account');
-          console.error('   5. App Password was generated for "Mail" and "Other"');
-        } else if (error.message.includes('535')) {
-          console.error('⚠️ Incorrect username or password. Check your App Password.');
-        } else if (error.message.includes('334')) {
-          console.error('⚠️ Authentication failed. Try generating a new App Password.');
-        }
-        
         isTransporterVerified = false;
       } else {
         console.log('✅ Email service configured successfully');
@@ -94,16 +55,10 @@ const createTransporter = () => {
   return transporter;
 };
 
-// Generate random OTP
 exports.generateOTP = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-// ============================================
-// MAIN EMAIL SENDING FUNCTIONS
-// ============================================
-
-// Send OTP email
 exports.sendOTPEmail = async (email, otp, name) => {
   try {
     console.log(`📧 Attempting to send OTP to: ${email}`);
@@ -112,8 +67,7 @@ exports.sendOTPEmail = async (email, otp, name) => {
     
     if (!transporter) {
       console.warn(`⚠️ Email service not configured. OTP for ${email}: ${otp}`);
-      // In development, return true so OTP works even without email
-      return process.env.NODE_ENV === 'development';
+      return true;
     }
 
     if (!email || !email.includes('@')) {
@@ -121,27 +75,19 @@ exports.sendOTPEmail = async (email, otp, name) => {
       return false;
     }
 
-    // Check if transporter is verified
     if (!isTransporterVerified) {
       console.warn('⚠️ Transporter not verified. Attempting to send anyway...');
-      // Try to verify again
       try {
         await transporter.verify();
         isTransporterVerified = true;
         console.log('✅ Transporter re-verified successfully');
       } catch (verifyError) {
         console.error('❌ Transporter verification failed:', verifyError.message);
-        // In development, still try to send
-        if (process.env.NODE_ENV === 'development') {
-          console.log('⚠️ Development mode: Proceeding despite verification failure');
-        } else {
-          return false;
-        }
+        console.log(`⚠️ OTP for ${email}: ${otp}`);
+        return true;
       }
     }
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    
     const mailOptions = {
       from: `"EventHub" <${process.env.EMAIL_USER}>`,
       to: email,
@@ -154,12 +100,11 @@ exports.sendOTPEmail = async (email, otp, name) => {
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>Password Reset OTP</title>
           <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-            body { font-family: 'Inter', Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5; }
+            body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5; }
             .container { max-width: 560px; margin: 0 auto; background-color: #ffffff; border-radius: 24px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.1); }
             .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 32px 24px; text-align: center; color: white; }
             .content { padding: 40px 32px; }
-            .otp-box { background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%); padding: 24px; text-align: center; margin: 24px 0; border-radius: 16px; }
+            .otp-box { background: #f3f4f6; padding: 24px; text-align: center; margin: 24px 0; border-radius: 16px; }
             .otp-code { background: white; padding: 20px; border-radius: 12px; display: inline-block; min-width: 200px; font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #667eea; }
             .warning-box { background: #fef3c7; padding: 16px; border-radius: 12px; margin: 24px 0; color: #92400e; }
             .footer { background-color: #f9fafb; padding: 24px 32px; text-align: center; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 12px; }
@@ -206,43 +151,15 @@ exports.sendOTPEmail = async (email, otp, name) => {
     const info = await transporter.sendMail(mailOptions);
     console.log(`✅ OTP email sent successfully to ${email}`);
     console.log(`   Message ID: ${info.messageId}`);
-    console.log(`   Response: ${info.response}`);
     return true;
     
   } catch (error) {
-    console.error('❌ Email sending error:');
-    console.error(`   Message: ${error.message}`);
-    console.error(`   Code: ${error.code || 'N/A'}`);
-    console.error(`   Command: ${error.command || 'N/A'}`);
-    console.error(`   Response: ${error.response || 'N/A'}`);
-    console.error(`   Stack: ${error.stack}`);
-    
-    // Provide helpful error messages
-    if (error.message.includes('Invalid login') || error.code === 'EAUTH') {
-      console.error('⚠️ Gmail authentication failed. Please check:');
-      console.error('   1. EMAIL_USER is correct (your Gmail address)');
-      console.error('   2. EMAIL_PASS is the 16-character App Password');
-      console.error('   3. No spaces in the App Password');
-      console.error('   4. 2-Step Verification is enabled');
-      console.error('   5. App Password generated for "Mail" and "Other"');
-    } else if (error.message.includes('ESOCKET')) {
-      console.error('⚠️ Connection issue. Check your internet connection.');
-    } else if (error.message.includes('ECONNECTION')) {
-      console.error('⚠️ Connection refused. Check your network settings.');
-    }
-    
-    // In development, return true so OTP works even if email fails
-    if (process.env.NODE_ENV === 'development') {
-      console.log('⚠️ Development mode: Returning true despite email failure');
-      console.log(`   OTP for ${email}: ${otp}`);
-      return true;
-    }
-    
-    return false;
+    console.error('❌ Email sending error:', error.message);
+    console.log(`⚠️ OTP for ${email}: ${otp}`);
+    return true;
   }
 };
 
-// Send Booking Confirmation Email
 exports.sendBookingConfirmationEmail = async (booking) => {
   try {
     console.log(`📧 Sending booking confirmation to: ${booking.customerEmail}`);
@@ -254,7 +171,6 @@ exports.sendBookingConfirmationEmail = async (booking) => {
       return false;
     }
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     const formatPrice = (price) => new Intl.NumberFormat('en-IN').format(price || 0);
     
     const mailOptions = {
@@ -269,7 +185,7 @@ exports.sendBookingConfirmationEmail = async (booking) => {
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>Booking Confirmation</title>
           <style>
-            body { font-family: 'Inter', Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5; }
+            body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5; }
             .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 24px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.1); }
             .header { background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 32px 24px; text-align: center; color: white; }
             .content { padding: 40px 32px; }
@@ -345,7 +261,7 @@ exports.sendBookingConfirmationEmail = async (booking) => {
               </div>
               
               <div style="text-align: center; margin: 30px 0;">
-                <a href="${frontendUrl}/dashboard" class="button">View My Bookings →</a>
+                <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard" class="button">View My Bookings →</a>
               </div>
               
               <p style="color: #6b7280; font-size: 14px; text-align: center;">
@@ -364,7 +280,6 @@ exports.sendBookingConfirmationEmail = async (booking) => {
 
     const info = await transporter.sendMail(mailOptions);
     console.log(`✅ Booking confirmation email sent to ${booking.customerEmail}`);
-    console.log(`   Message ID: ${info.messageId}`);
     return true;
     
   } catch (error) {
@@ -373,7 +288,6 @@ exports.sendBookingConfirmationEmail = async (booking) => {
   }
 };
 
-// Send Invoice Email for Booking Confirmation
 exports.sendInvoiceEmail = async (booking) => {
   try {
     console.log(`📧 Sending invoice to: ${booking.customerEmail}`);
@@ -385,7 +299,6 @@ exports.sendInvoiceEmail = async (booking) => {
       return false;
     }
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     const formatPrice = (price) => new Intl.NumberFormat('en-IN').format(price || 0);
     
     const mailOptions = {
@@ -400,7 +313,7 @@ exports.sendInvoiceEmail = async (booking) => {
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>Booking Confirmed & Invoice</title>
           <style>
-            body { font-family: 'Inter', Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5; }
+            body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5; }
             .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 24px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.1); }
             .header { background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 32px 24px; text-align: center; color: white; }
             .content { padding: 40px 32px; }
@@ -473,7 +386,7 @@ exports.sendInvoiceEmail = async (booking) => {
               </div>
               
               <div style="text-align: center; margin: 30px 0;">
-                <a href="${frontendUrl}/dashboard" class="button">View My Bookings →</a>
+                <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard" class="button">View My Bookings →</a>
               </div>
               
               <p style="color: #6b7280; font-size: 14px; text-align: center;">
@@ -492,7 +405,6 @@ exports.sendInvoiceEmail = async (booking) => {
 
     const info = await transporter.sendMail(mailOptions);
     console.log(`✅ Invoice email sent to ${booking.customerEmail}`);
-    console.log(`   Message ID: ${info.messageId}`);
     return true;
     
   } catch (error) {
@@ -501,7 +413,6 @@ exports.sendInvoiceEmail = async (booking) => {
   }
 };
 
-// Send Booking Rejection Email
 exports.sendRejectionEmail = async (booking, reason) => {
   try {
     console.log(`📧 Sending rejection email to: ${booking.customerEmail}`);
@@ -524,7 +435,7 @@ exports.sendRejectionEmail = async (booking, reason) => {
           <meta charset="UTF-8">
           <title>Booking Cancelled</title>
           <style>
-            body { font-family: 'Inter', Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5; }
+            body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5; }
             .container { max-width: 560px; margin: 0 auto; background-color: #ffffff; border-radius: 24px; overflow: hidden; }
             .header { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 32px; text-align: center; color: white; }
             .content { padding: 40px 32px; }
@@ -582,7 +493,6 @@ exports.sendRejectionEmail = async (booking, reason) => {
 
     const info = await transporter.sendMail(mailOptions);
     console.log(`✅ Rejection email sent to ${booking.customerEmail}`);
-    console.log(`   Message ID: ${info.messageId}`);
     return true;
     
   } catch (error) {
@@ -591,7 +501,6 @@ exports.sendRejectionEmail = async (booking, reason) => {
   }
 };
 
-// Send Refund Notification Email
 exports.sendRefundEmail = async (booking, reason, refundAmount = null) => {
   try {
     console.log(`📧 Sending refund email to: ${booking.customerEmail}`);
@@ -603,10 +512,8 @@ exports.sendRefundEmail = async (booking, reason, refundAmount = null) => {
       return false;
     }
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     const formatPrice = (price) => new Intl.NumberFormat('en-IN').format(price || 0);
     
-    // Check if payment was actually made
     const wasPaymentMade = !!(booking.paymentId || 
                           booking.paymentStatus === 'completed' || 
                           booking.paymentStatus === 'partial' ||
@@ -614,7 +521,6 @@ exports.sendRefundEmail = async (booking, reason, refundAmount = null) => {
     
     const refundAmountValue = refundAmount || booking.advanceAmount || (booking.totalAmount * 0.3);
     
-    // If no payment was made, send regular cancellation instead
     if (!wasPaymentMade) {
       console.log(`⚠️ No payment found for booking ${booking._id}, sending cancellation email instead`);
       return await exports.sendRejectionEmail(booking, reason || 'Booking cancelled');
@@ -634,7 +540,7 @@ exports.sendRefundEmail = async (booking, reason, refundAmount = null) => {
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>Refund Initiated</title>
           <style>
-            body { font-family: 'Inter', Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5; }
+            body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5; }
             .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 24px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.1); }
             .header { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); padding: 32px 24px; text-align: center; color: white; }
             .content { padding: 40px 32px; }
@@ -726,7 +632,7 @@ exports.sendRefundEmail = async (booking, reason, refundAmount = null) => {
               </div>
               
               <div style="text-align: center; margin: 30px 0;">
-                <a href="${frontendUrl}/dashboard" class="button">View My Dashboard →</a>
+                <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard" class="button">View My Dashboard →</a>
               </div>
               
               <p style="color: #6b7280; font-size: 14px; text-align: center;">
@@ -745,7 +651,6 @@ exports.sendRefundEmail = async (booking, reason, refundAmount = null) => {
 
     const info = await transporter.sendMail(mailOptions);
     console.log(`✅ Refund email sent to ${booking.customerEmail}`);
-    console.log(`   Message ID: ${info.messageId}`);
     return true;
     
   } catch (error) {
@@ -754,7 +659,6 @@ exports.sendRefundEmail = async (booking, reason, refundAmount = null) => {
   }
 };
 
-// Send Password Reset Success Email
 exports.sendPasswordResetSuccessEmail = async (email, name) => {
   try {
     console.log(`📧 Sending password reset success email to: ${email}`);
@@ -766,8 +670,6 @@ exports.sendPasswordResetSuccessEmail = async (email, name) => {
       return false;
     }
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    
     const mailOptions = {
       from: `"EventHub Security" <${process.env.EMAIL_USER}>`,
       to: email,
@@ -779,7 +681,7 @@ exports.sendPasswordResetSuccessEmail = async (email, name) => {
           <meta charset="UTF-8">
           <title>Password Changed</title>
           <style>
-            body { font-family: 'Inter', Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5; }
+            body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5; }
             .container { max-width: 560px; margin: 0 auto; background-color: #ffffff; border-radius: 24px; overflow: hidden; }
             .header { background: linear-gradient(135deg, #28a745 0%, #20c997 100%); padding: 32px; text-align: center; color: white; }
             .content { padding: 40px 32px; }
@@ -803,7 +705,7 @@ exports.sendPasswordResetSuccessEmail = async (email, name) => {
               </div>
               
               <div style="text-align: center;">
-                <a href="${frontendUrl}/login" class="button">Login to Your Account →</a>
+                <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/login" class="button">Login to Your Account →</a>
               </div>
             </div>
             
@@ -818,7 +720,6 @@ exports.sendPasswordResetSuccessEmail = async (email, name) => {
 
     const info = await transporter.sendMail(mailOptions);
     console.log(`✅ Password reset success email sent to ${email}`);
-    console.log(`   Message ID: ${info.messageId}`);
     return true;
     
   } catch (error) {
@@ -827,11 +728,6 @@ exports.sendPasswordResetSuccessEmail = async (email, name) => {
   }
 };
 
-// ============================================
-// TEST & UTILITY FUNCTIONS
-// ============================================
-
-// Test email configuration
 exports.testEmailConfig = async () => {
   try {
     console.log('🔧 Testing email configuration...');
@@ -845,17 +741,14 @@ exports.testEmailConfig = async () => {
     await transporter.verify();
     console.log('✅ Email service configuration is valid');
     console.log(`   📧 Using: ${process.env.EMAIL_USER}`);
-    console.log(`   🔑 Password length: ${process.env.EMAIL_PASS?.replace(/\s/g, '').length || 0} chars`);
     return true;
     
   } catch (error) {
-    console.error('❌ Email service configuration invalid:');
-    console.error(`   ${error.message}`);
+    console.error('❌ Email service configuration invalid:', error.message);
     return false;
   }
 };
 
-// Send test email
 exports.sendTestEmail = async (email) => {
   try {
     console.log(`📧 Sending test email to: ${email}`);
@@ -865,8 +758,6 @@ exports.sendTestEmail = async (email) => {
       console.log('❌ Email service not configured');
       return false;
     }
-    
-    const testOTP = '123456';
     
     const mailOptions = {
       from: `"EventHub Test" <${process.env.EMAIL_USER}>`,
@@ -912,7 +803,6 @@ exports.sendTestEmail = async (email) => {
 
     const info = await transporter.sendMail(mailOptions);
     console.log(`✅ Test email sent successfully to ${email}`);
-    console.log(`   Message ID: ${info.messageId}`);
     return true;
     
   } catch (error) {
@@ -920,20 +810,3 @@ exports.sendTestEmail = async (email) => {
     return false;
   }
 };
-
-// ============================================
-// 🔧 WHAT WAS FIXED:
-// ============================================
-// 1. ✅ Fixed password cleaning (removes spaces automatically)
-// 2. ✅ Added detailed logging for debugging
-// 3. ✅ Added transporter verification with helpful error messages
-// 4. ✅ Added better Gmail-specific error handling
-// 5. ✅ Added test functions (testEmailConfig, sendTestEmail)
-// 6. ✅ Added development mode fallback (returns true even if email fails)
-// 7. ✅ Improved error messages with specific solutions
-// 8. ✅ Added connection timeout settings
-// 9. ✅ Added isTransporterVerified flag
-// 10. ✅ Added message ID logging for tracking
-// 11. ✅ Fixed missing null checks for booking data
-// 12. ✅ Added cleaner HTML email templates
-// ============================================
