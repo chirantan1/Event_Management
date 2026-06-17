@@ -20,6 +20,37 @@ const createClient = () => {
   return defaultClient;
 };
 
+// Reusable email sending function
+const sendEmail = async (to, subject, htmlContent, senderName = 'EventHub') => {
+  try {
+    const client = createClient();
+    
+    if (!client) {
+      console.log('⚠️ Email disabled - skipping');
+      return false;
+    }
+
+    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+    
+    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+    sendSmtpEmail.subject = subject;
+    sendSmtpEmail.sender = { 
+      name: senderName, 
+      email: process.env.EMAIL_USER || 'noreply@eventhub.com' 
+    };
+    sendSmtpEmail.to = [{ email: to }];
+    sendSmtpEmail.htmlContent = htmlContent;
+
+    const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
+    console.log(`✅ Email sent to ${to}, Message ID: ${result.messageId}`);
+    return true;
+    
+  } catch (error) {
+    console.error(`❌ Email error: ${error.message}`);
+    return false;
+  }
+};
+
 exports.generateOTP = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
@@ -27,78 +58,41 @@ exports.generateOTP = () => {
 exports.sendOTPEmail = async (email, otp, name) => {
   console.log(`📧 OTP for ${email}: ${otp}`);
   
-  try {
-    const client = createClient();
-    
-    if (!client) {
-      console.log('✅ OTP generated (email disabled)');
-      return true;
-    }
-
-    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
-    
-    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-    sendSmtpEmail.subject = 'Password Reset OTP - EventHub';
-    sendSmtpEmail.sender = { 
-      name: 'EventHub', 
-      email: process.env.EMAIL_USER || 'noreply@eventhub.com' 
-    };
-    sendSmtpEmail.to = [{ email: email }];
-    sendSmtpEmail.htmlContent = `
-      <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #fff; border-radius: 24px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.1);">
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 32px 24px; text-align: center; color: white;">
-          <h1 style="margin: 0; font-size: 28px;">EventHub</h1>
-          <p style="margin: 8px 0 0; opacity: 0.9;">Password Reset Request</p>
-        </div>
-        <div style="padding: 40px 32px;">
-          <h2>Hello ${name || 'User'},</h2>
-          <p>We received a request to reset your password. Use the verification code below:</p>
-          <div style="background: #f3f4f6; padding: 24px; text-align: center; margin: 24px 0; border-radius: 16px;">
-            <div style="background: white; padding: 20px; border-radius: 12px; display: inline-block; min-width: 200px; font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #667eea;">${otp}</div>
-          </div>
-          <div style="background: #fef3c7; padding: 16px; border-radius: 12px; margin: 24px 0; color: #92400e;">
-            <p style="margin: 0;">⏰ This OTP is valid for <strong>10 minutes</strong></p>
-            <p style="margin: 8px 0 0;">🔒 For security, do not share this code with anyone</p>
-          </div>
-          <p style="color: #6b7280; font-size: 14px;">If you didn't request this, please ignore this email.</p>
-          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">
-          <p style="color: #9ca3af; font-size: 12px; text-align: center;">© ${new Date().getFullYear()} EventHub. All rights reserved.</p>
-        </div>
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #fff; border-radius: 24px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.1);">
+      <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 32px 24px; text-align: center; color: white;">
+        <h1 style="margin: 0; font-size: 28px;">EventHub</h1>
+        <p style="margin: 8px 0 0; opacity: 0.9;">Password Reset Request</p>
       </div>
-    `;
+      <div style="padding: 40px 32px;">
+        <h2>Hello ${name || 'User'},</h2>
+        <p>We received a request to reset your password. Use the verification code below:</p>
+        <div style="background: #f3f4f6; padding: 24px; text-align: center; margin: 24px 0; border-radius: 16px;">
+          <div style="background: white; padding: 20px; border-radius: 12px; display: inline-block; min-width: 200px; font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #667eea;">${otp}</div>
+        </div>
+        <div style="background: #fef3c7; padding: 16px; border-radius: 12px; margin: 24px 0; color: #92400e;">
+          <p style="margin: 0;">⏰ This OTP is valid for <strong>10 minutes</strong></p>
+          <p style="margin: 8px 0 0;">🔒 For security, do not share this code with anyone</p>
+        </div>
+        <p style="color: #6b7280; font-size: 14px;">If you didn't request this, please ignore this email.</p>
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">
+        <p style="color: #9ca3af; font-size: 12px; text-align: center;">© ${new Date().getFullYear()} EventHub. All rights reserved.</p>
+      </div>
+    </div>
+  `;
 
-    await apiInstance.sendTransacEmail(sendSmtpEmail);
-    console.log(`✅ Email sent to ${email}`);
-    return true;
-    
-  } catch (error) {
-    console.error(`❌ Email error: ${error.message}`);
-    return true;
-  }
+  const result = await sendEmail(email, 'Password Reset OTP - EventHub', htmlContent);
+  console.log(`✅ OTP response sent for ${email}`);
+  return result || true;
 };
 
 exports.sendBookingConfirmationEmail = async (booking) => {
   try {
     console.log(`📧 Booking confirmation for: ${booking.customerEmail}`);
     
-    const client = createClient();
-    
-    if (!client) {
-      console.log('⚠️ Email disabled - skipping');
-      return true;
-    }
-
     const formatPrice = (price) => new Intl.NumberFormat('en-IN').format(price || 0);
-    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
     
-    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-    sendSmtpEmail.subject = `Booking Confirmed! - ${booking.serviceName || 'Event'}`;
-    sendSmtpEmail.sender = { 
-      name: 'EventHub', 
-      email: process.env.EMAIL_USER || 'noreply@eventhub.com' 
-    };
-    sendSmtpEmail.to = [{ email: booking.customerEmail }];
-    sendSmtpEmail.htmlContent = `
+    const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #fff; border-radius: 24px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.1);">
         <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 32px 24px; text-align: center; color: white;">
           <div style="font-size: 48px; margin-bottom: 8px;">🎉</div>
@@ -170,9 +164,12 @@ exports.sendBookingConfirmationEmail = async (booking) => {
       </div>
     `;
 
-    await apiInstance.sendTransacEmail(sendSmtpEmail);
-    console.log(`✅ Booking email sent to ${booking.customerEmail}`);
-    return true;
+    const result = await sendEmail(
+      booking.customerEmail,
+      `Booking Confirmed! - ${booking.serviceName || 'Event'}`,
+      htmlContent
+    );
+    return result || true;
     
   } catch (error) {
     console.error(`❌ Booking email error: ${error.message}`);
@@ -184,24 +181,9 @@ exports.sendInvoiceEmail = async (booking) => {
   try {
     console.log(`📧 Invoice for: ${booking.customerEmail}`);
     
-    const client = createClient();
-    
-    if (!client) {
-      console.log('⚠️ Email disabled - skipping');
-      return true;
-    }
-
     const formatPrice = (price) => new Intl.NumberFormat('en-IN').format(price || 0);
-    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
     
-    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-    sendSmtpEmail.subject = `Booking Confirmed & Invoice - ${booking.serviceName || 'Event'}`;
-    sendSmtpEmail.sender = { 
-      name: 'EventHub', 
-      email: process.env.EMAIL_USER || 'noreply@eventhub.com' 
-    };
-    sendSmtpEmail.to = [{ email: booking.customerEmail }];
-    sendSmtpEmail.htmlContent = `
+    const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #fff; border-radius: 24px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.1);">
         <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 32px 24px; text-align: center; color: white;">
           <div style="font-size: 48px; margin-bottom: 8px;">🎉</div>
@@ -269,9 +251,12 @@ exports.sendInvoiceEmail = async (booking) => {
       </div>
     `;
 
-    await apiInstance.sendTransacEmail(sendSmtpEmail);
-    console.log(`✅ Invoice email sent to ${booking.customerEmail}`);
-    return true;
+    const result = await sendEmail(
+      booking.customerEmail,
+      `Booking Confirmed & Invoice - ${booking.serviceName || 'Event'}`,
+      htmlContent
+    );
+    return result || true;
     
   } catch (error) {
     console.error(`❌ Invoice email error: ${error.message}`);
@@ -283,23 +268,7 @@ exports.sendRejectionEmail = async (booking, reason) => {
   try {
     console.log(`📧 Rejection for: ${booking.customerEmail}`);
     
-    const client = createClient();
-    
-    if (!client) {
-      console.log('⚠️ Email disabled - skipping');
-      return true;
-    }
-
-    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
-    
-    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-    sendSmtpEmail.subject = `Booking Cancelled - ${booking.serviceName || 'Event'}`;
-    sendSmtpEmail.sender = { 
-      name: 'EventHub', 
-      email: process.env.EMAIL_USER || 'noreply@eventhub.com' 
-    };
-    sendSmtpEmail.to = [{ email: booking.customerEmail }];
-    sendSmtpEmail.htmlContent = `
+    const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #fff; border-radius: 24px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.1);">
         <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 32px; text-align: center; color: white;">
           <div style="font-size: 48px;">📢</div>
@@ -337,9 +306,12 @@ exports.sendRejectionEmail = async (booking, reason) => {
       </div>
     `;
 
-    await apiInstance.sendTransacEmail(sendSmtpEmail);
-    console.log(`✅ Rejection email sent to ${booking.customerEmail}`);
-    return true;
+    const result = await sendEmail(
+      booking.customerEmail,
+      `Booking Cancelled - ${booking.serviceName || 'Event'}`,
+      htmlContent
+    );
+    return result || true;
     
   } catch (error) {
     console.error(`❌ Rejection email error: ${error.message}`);
@@ -351,15 +323,7 @@ exports.sendRefundEmail = async (booking, reason, refundAmount = null) => {
   try {
     console.log(`📧 Refund for: ${booking.customerEmail}`);
     
-    const client = createClient();
-    
-    if (!client) {
-      console.log('⚠️ Email disabled - skipping');
-      return true;
-    }
-
     const formatPrice = (price) => new Intl.NumberFormat('en-IN').format(price || 0);
-    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
     
     const wasPaymentMade = !!(booking.paymentId || 
                           booking.paymentStatus === 'completed' || 
@@ -375,14 +339,7 @@ exports.sendRefundEmail = async (booking, reason, refundAmount = null) => {
     
     console.log(`💰 Sending REFUND email - Amount: ₹${refundAmountValue}`);
     
-    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-    sendSmtpEmail.subject = `Refund Initiated - Booking Cancelled (${booking._id?.toString().slice(-8) || 'N/A'})`;
-    sendSmtpEmail.sender = { 
-      name: 'EventHub', 
-      email: process.env.EMAIL_USER || 'noreply@eventhub.com' 
-    };
-    sendSmtpEmail.to = [{ email: booking.customerEmail }];
-    sendSmtpEmail.htmlContent = `
+    const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #fff; border-radius: 24px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.1);">
         <div style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); padding: 32px 24px; text-align: center; color: white;">
           <div style="font-size: 48px; margin-bottom: 8px;">💰</div>
@@ -463,9 +420,12 @@ exports.sendRefundEmail = async (booking, reason, refundAmount = null) => {
       </div>
     `;
 
-    await apiInstance.sendTransacEmail(sendSmtpEmail);
-    console.log(`✅ Refund email sent to ${booking.customerEmail}`);
-    return true;
+    const result = await sendEmail(
+      booking.customerEmail,
+      `Refund Initiated - Booking Cancelled (${booking._id?.toString().slice(-8) || 'N/A'})`,
+      htmlContent
+    );
+    return result || true;
     
   } catch (error) {
     console.error(`❌ Refund email error: ${error.message}`);
@@ -477,23 +437,7 @@ exports.sendPasswordResetSuccessEmail = async (email, name) => {
   try {
     console.log(`📧 Password reset success for: ${email}`);
     
-    const client = createClient();
-    
-    if (!client) {
-      console.log('⚠️ Email disabled - skipping');
-      return true;
-    }
-
-    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
-    
-    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-    sendSmtpEmail.subject = 'Password Changed Successfully - EventHub';
-    sendSmtpEmail.sender = { 
-      name: 'EventHub Security', 
-      email: process.env.EMAIL_USER || 'noreply@eventhub.com' 
-    };
-    sendSmtpEmail.to = [{ email: email }];
-    sendSmtpEmail.htmlContent = `
+    const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #fff; border-radius: 24px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.1);">
         <div style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); padding: 32px; text-align: center; color: white;">
           <div style="font-size: 48px;">✓</div>
@@ -517,9 +461,13 @@ exports.sendPasswordResetSuccessEmail = async (email, name) => {
       </div>
     `;
 
-    await apiInstance.sendTransacEmail(sendSmtpEmail);
-    console.log(`✅ Success email sent to ${email}`);
-    return true;
+    const result = await sendEmail(
+      email,
+      'Password Changed Successfully - EventHub',
+      htmlContent,
+      'EventHub Security'
+    );
+    return result || true;
     
   } catch (error) {
     console.error(`❌ Success email error: ${error.message}`);
@@ -547,22 +495,7 @@ exports.sendTestEmail = async (email) => {
   try {
     console.log(`📧 Sending test email to: ${email}`);
     
-    const client = createClient();
-    if (!client) {
-      console.log('❌ Email service not configured');
-      return false;
-    }
-
-    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
-    
-    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-    sendSmtpEmail.subject = 'Test Email - EventHub Email Service';
-    sendSmtpEmail.sender = { 
-      name: 'EventHub Test', 
-      email: process.env.EMAIL_USER || 'noreply@eventhub.com' 
-    };
-    sendSmtpEmail.to = [{ email: email }];
-    sendSmtpEmail.htmlContent = `
+    const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #fff; border-radius: 24px; padding: 40px; box-shadow: 0 20px 60px rgba(0,0,0,0.1);">
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 32px; text-align: center; color: white; border-radius: 16px 16px 0 0; margin: -40px -40px 30px -40px;">
           <h1 style="margin: 0;">✅ Test Email</h1>
@@ -580,9 +513,13 @@ exports.sendTestEmail = async (email) => {
       </div>
     `;
 
-    await apiInstance.sendTransacEmail(sendSmtpEmail);
-    console.log(`✅ Test email sent to ${email}`);
-    return true;
+    const result = await sendEmail(
+      email,
+      'Test Email - EventHub Email Service',
+      htmlContent,
+      'EventHub Test'
+    );
+    return result || true;
     
   } catch (error) {
     console.error('❌ Test email failed:', error.message);
