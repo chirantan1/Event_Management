@@ -1,9 +1,4 @@
-// ============================================
-// FILE: backend/server.js
-// ============================================
-// ✅ COMPLETE FIXED CODE
-// ============================================
-
+// backend/server.js
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -27,53 +22,45 @@ const eventBookingRoutes = require('./routes/eventBookingRoutes');
 const serviceRoutes = require('./routes/serviceRoutes');
 const vendorRoutes = require('./routes/vendorRoutes');
 
-// Import email service
-const emailService = require('./utils/emailService');
-
 const app = express();
 
-// ============================================
-// ENVIRONMENT CONFIGURATION
-// ============================================
+// ==================== ENVIRONMENT CONFIGURATION ====================
 const PORT = process.env.PORT || 5000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
-// Allowed origins for CORS
+// For production on Render, also allow the deployed frontend
 const allowedOrigins = [
   FRONTEND_URL,
   'https://event-management-1-4cat.onrender.com',
-  'https://event-management-froo.onrender.com',
   'http://localhost:5173',
-  'http://localhost:3000'
+  'http://localhost:3000',
+  'https://event-management-froo.onrender.com'
 ].filter(Boolean);
 
 const uniqueOrigins = [...new Set(allowedOrigins)];
 
-// ============================================
-// CORS CONFIGURATION
-// ============================================
+console.log('\n🎯 Server Configuration:');
+console.log(`📌 Environment: ${NODE_ENV}`);
+console.log(`📌 Frontend URL: ${FRONTEND_URL}`);
+console.log(`📌 Allowed Origins: ${uniqueOrigins.join(', ')}`);
+console.log(`📌 Port: ${PORT}`);
+
+// ==================== CORS CONFIGURATION ====================
 const corsOptions = {
   origin: function(origin, callback) {
     if (!origin) return callback(null, true);
     
-    // Allow all onrender.com subdomains
-    if (origin.includes('onrender.com')) {
+    if (NODE_ENV === 'development' && origin?.match(/^http:\/\/localhost:\d+$/)) {
       return callback(null, true);
     }
     
-    // Allow localhost for development
-    if (origin.match(/^http:\/\/localhost:\d+$/)) {
-      return callback(null, true);
-    }
-    
-    // Check against allowed list
     if (uniqueOrigins.includes(origin)) {
-      return callback(null, true);
+      callback(null, true);
+    } else {
+      console.warn(`⚠️ CORS blocked origin: ${origin}`);
+      callback(null, true);
     }
-    
-    console.warn(`⚠️ CORS blocked: ${origin}`);
-    callback(null, true);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -81,127 +68,83 @@ const corsOptions = {
   optionsSuccessStatus: 204
 };
 
-// ============================================
-// MIDDLEWARE
-// ============================================
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+// ==================== MIDDLEWARE ====================
 
 if (NODE_ENV === 'production') {
-  app.use(helmet({ 
-    crossOriginResourcePolicy: { policy: "cross-origin" }
-  }));
+  app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 }
 
 app.use(compression());
+app.use(cors(corsOptions));
+
+// ✅ FIXED: Removed the problematic app.options('*', ...) handler
+// The cors() middleware already handles OPTIONS preflight requests automatically
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
 if (NODE_ENV === 'development') {
   app.use(morgan('dev'));
+} else {
+  app.use(morgan('combined'));
 }
 
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 10000,
   message: { success: false, error: 'Too many requests, please try again later.' }
 });
 app.use('/api/', limiter);
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 50,
+  max: 50000,
   message: { success: false, error: 'Too many attempts, please try again later.' }
 });
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
-app.use('/api/auth/forgot-password', authLimiter);
 
 app.use(passport.initialize());
 
-// ============================================
-// ROUTES
-// ============================================
+app.use((req, res, next) => {
+  console.log(`📡 ${req.method} ${req.url} - Origin: ${req.headers.origin || 'unknown'}`);
+  next();
+});
 
-// Health & Info Routes
+// ==================== ROUTES ====================
+console.log('\n🔧 Registering routes...');
+
 app.get('/', (req, res) => {
   res.status(200).json({ 
     success: true, 
     message: 'Event Management API is running',
     environment: NODE_ENV,
+    frontendUrl: FRONTEND_URL,
     timestamp: new Date().toISOString()
   });
 });
 
 app.get('/api/health', (req, res) => {
   res.json({ 
-    status: 'OK',
+    status: 'OK', 
+    message: 'Server is running',
     mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
     timestamp: new Date().toISOString()
   });
 });
 
-// ============================================
-// EMAIL TEST ROUTES
-// ============================================
-
-app.get('/api/email-status', (req, res) => {
-  const emailConfigured = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
-  const hasSpaces = process.env.EMAIL_PASS?.includes(' ') || false;
-  
-  res.json({
-    success: true,
-    configured: emailConfigured,
-    hasSpacesInPassword: hasSpaces,
-    warning: hasSpaces ? 'Remove spaces from EMAIL_PASS' : null,
-    environment: NODE_ENV
+app.get('/api/test-cors', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'CORS is working!',
+    origin: req.headers.origin || 'no origin',
+    allowedOrigins: uniqueOrigins
   });
 });
 
-app.get('/api/test-email-config', async (req, res) => {
-  try {
-    const result = await emailService.testEmailConfig();
-    res.json({
-      success: result,
-      message: result ? 'Email configuration is valid' : 'Email configuration is invalid',
-      config: {
-        emailUser: process.env.EMAIL_USER ? 'Set' : 'Not set',
-        emailPass: process.env.EMAIL_PASS ? 'Set' : 'Not set',
-        hasSpaces: process.env.EMAIL_PASS?.includes(' ') || false
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-app.post('/api/test-email', async (req, res) => {
-  try {
-    const { email } = req.body;
-    
-    if (!email || !email.includes('@')) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Valid email is required' 
-      });
-    }
-
-    const result = await emailService.sendTestEmail(email);
-    
-    res.json({
-      success: result,
-      message: result ? `Test email sent to ${email}` : 'Failed to send test email'
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// ============================================
-// API ROUTES
-// ============================================
+// API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/bookings', bookingRoutes);
@@ -210,21 +153,25 @@ app.use('/api/event-bookings', eventBookingRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/vendor', vendorRoutes);
 
-// ============================================
-// ERROR HANDLERS
-// ============================================
+console.log('✅ All routes registered\n');
 
-// 404 Handler
+// ==================== ERROR HANDLERS ====================
+
+// Handle 404 - Route not found
 app.use((req, res) => {
+  console.log(`❌ 404: ${req.method} ${req.originalUrl}`);
   res.status(404).json({ 
     success: false, 
-    error: `Route ${req.originalUrl} not found`
+    error: `Route ${req.originalUrl} not found`,
+    method: req.method,
+    availableEndpoints: ['/', '/api/health', '/api/test-cors', '/api/auth', '/api/events', '/api/bookings', '/api/admin', '/api/services', '/api/vendor']
   });
 });
 
 // Global error handler
 app.use((err, req, res, next) => {
   console.error('❌ Error:', err.message);
+  console.error('Stack:', err.stack);
   
   if (err.message && err.message.includes('CORS')) {
     return res.status(403).json({ success: false, error: err.message });
@@ -232,17 +179,18 @@ app.use((err, req, res, next) => {
   
   res.status(err.status || 500).json({ 
     success: false, 
-    error: err.message || 'Internal server error'
+    error: err.message || 'Internal server error',
+    ...(NODE_ENV === 'development' && { stack: err.stack })
   });
 });
 
-// ============================================
-// DATABASE CONNECTION
-// ============================================
+// ==================== DATABASE CONNECTION ====================
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI);
-    console.log('✅ MongoDB connected');
+    console.log('✅ MongoDB connected successfully');
+    console.log(`📦 Database: ${mongoose.connection.name}`);
+    console.log(`📍 Host: ${mongoose.connection.host}`);
   } catch (err) {
     console.error('❌ MongoDB connection error:', err.message);
     if (NODE_ENV === 'production') {
@@ -254,22 +202,34 @@ const connectDB = async () => {
   }
 };
 
-// ============================================
-// START SERVER
-// ============================================
+// ==================== START SERVER ====================
 const startServer = async () => {
   await connectDB();
   
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log('\n' + '='.repeat(50));
-    console.log(`🚀 Server running on port ${PORT}`);
+    console.log('🚀 SERVER STARTED');
+    console.log('='.repeat(50));
     console.log(`📍 Environment: ${NODE_ENV}`);
-    console.log(`📧 Email: ${process.env.EMAIL_USER ? 'Configured' : 'Not configured'}`);
+    console.log(`🔗 Backend URL: http://localhost:${PORT}`);
+    console.log(`🎨 Frontend URL: ${FRONTEND_URL}`);
+    console.log(`✅ CORS Enabled for: ${uniqueOrigins.join(', ')}`);
     console.log('='.repeat(50) + '\n');
+    
+    console.log('🔍 Available endpoints:');
+    console.log(`  ✅ GET  http://localhost:${PORT}/`);
+    console.log(`  ✅ GET  http://localhost:${PORT}/api/health`);
+    console.log(`  ✅ GET  http://localhost:${PORT}/api/test-cors`);
+    console.log(`  ✅ POST http://localhost:${PORT}/api/auth/register`);
+    console.log(`  ✅ POST http://localhost:${PORT}/api/auth/login`);
+    console.log(`  ✅ GET  http://localhost:${PORT}/api/events`);
+    console.log(`  ✅ GET  http://localhost:${PORT}/api/services`);
+    console.log(`  ✅ GET  http://localhost:${PORT}/api/vendor/bookings`);
+    console.log(`  ✅ GET  http://localhost:${PORT}/api/admin/stats`);
   });
   
   const gracefulShutdown = async () => {
-    console.log('\n⚠️ Shutting down...');
+    console.log('\n⚠️ Shutting down gracefully...');
     server.close(async () => {
       await mongoose.connection.close();
       console.log('✅ Server closed');
@@ -284,14 +244,3 @@ const startServer = async () => {
 startServer();
 
 module.exports = app;
-
-// ============================================
-// FIXES APPLIED:
-// ============================================
-// 1. ✅ CORS - Allows all onrender.com subdomains
-// 2. ✅ CORS - Added explicit OPTIONS handling
-// 3. ✅ Email - Added test endpoints
-// 4. ✅ Rate limiting - Added for forgot-password
-// 5. ✅ Cleaned up excessive console logs
-// 6. ✅ Simplified error responses
-// ============================================
