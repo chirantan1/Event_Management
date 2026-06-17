@@ -15,7 +15,7 @@ const passport = require('passport');
 const cookieParser = require('cookie-parser');
 require('dotenv').config();
 
-// Import configs
+// Import passport config
 require('./config/passport');
 
 // Import routes
@@ -48,12 +48,13 @@ const allowedOrigins = [
   'http://localhost:3000'
 ].filter(Boolean);
 
+const uniqueOrigins = [...new Set(allowedOrigins)];
+
 // ============================================
-// CORS CONFIGURATION - FIXED
+// CORS CONFIGURATION
 // ============================================
 const corsOptions = {
   origin: function(origin, callback) {
-    // Allow requests with no origin
     if (!origin) return callback(null, true);
     
     // Allow all onrender.com subdomains
@@ -67,7 +68,7 @@ const corsOptions = {
     }
     
     // Check against allowed list
-    if (allowedOrigins.includes(origin)) {
+    if (uniqueOrigins.includes(origin)) {
       return callback(null, true);
     }
     
@@ -124,7 +125,7 @@ app.use(passport.initialize());
 // ROUTES
 // ============================================
 
-// Health & Info
+// Health & Info Routes
 app.get('/', (req, res) => {
   res.status(200).json({ 
     success: true, 
@@ -259,9 +260,6 @@ const connectDB = async () => {
 const startServer = async () => {
   await connectDB();
   
-  // Test email on startup
-  await emailService.testEmailConfig();
-  
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log('\n' + '='.repeat(50));
     console.log(`🚀 Server running on port ${PORT}`);
@@ -270,7 +268,6 @@ const startServer = async () => {
     console.log('='.repeat(50) + '\n');
   });
   
-  // Graceful shutdown
   const gracefulShutdown = async () => {
     console.log('\n⚠️ Shutting down...');
     server.close(async () => {
