@@ -19,20 +19,24 @@ const createTransporter = () => {
     const cleanPassword = emailPass.replace(/\s/g, '');
 
     transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false,
       auth: {
         user: emailUser,
         pass: cleanPassword
       },
       tls: {
-        rejectUnauthorized: false
+        rejectUnauthorized: false,
+        ciphers: 'SSLv3'
       },
-      connectionTimeout: 5000,
-      greetingTimeout: 5000,
-      socketTimeout: 5000
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 10000,
+      family: 4
     });
 
-    console.log('✅ Email transporter created');
+    console.log('✅ Email transporter created (IPv4 forced)');
   }
   return transporter;
 };
