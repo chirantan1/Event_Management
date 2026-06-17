@@ -1,0 +1,9 @@
+# Ignore all node_modules folders
+node_modules/
+
+# Also ignore these common files
+.env
+.DS_Store
+dist/
+build/
+*.log
